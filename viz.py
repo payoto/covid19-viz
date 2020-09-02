@@ -1,0 +1,249 @@
+from typing import List
+from datetime import datetime
+
+from matplotlib import pyplot as plt
+from matplotlib.ticker import FuncFormatter
+from matplotlib.rcsetup import cycler
+import pandas as pd
+
+
+def enable_time_series_plot(
+    in_df, timein_field="time", timeseries_field_out="date", date_format="%Y-%m-%d",
+):
+    """
+    Small tool to add a field to a dataframe which can be used for time series
+    plotting
+    """
+    if timeseries_field_out not in in_df.columns:
+        in_df[timeseries_field_out] = pd.to_datetime(
+            in_df[timein_field], format=date_format
+        )
+    return in_df
+
+
+def axis_date_limits(ax, min_date=None, max_date=None):
+    # Tailor axis limits
+    x_min, x_max = pd.to_datetime(ax.get_xlim())
+    if not (max_date is None):
+        ax.set_xlim(right=min(x_max, pd.to_datetime(max_date)))
+    if not (min_date is None):
+        ax.set_xlim(left=max(x_min, pd.to_datetime(min_date)))
+
+
+def oc19_data_preproc(
+    data,
+    maille_code,
+    rows=["t", "deces", "deces_ehpad", "reanimation", "hospitalises"],
+    no_negatives=["deces", "deces_ehpad"],
+):
+    if maille_code == "FRA":
+        fra = data.loc[
+            (data["maille_code"] == maille_code)
+            & (data["source_nom"] != "OpenCOVID19-fr"),
+        ]
+
+    else:
+        fra = data.loc[
+            (data["maille_code"] == maille_code)
+            & (data["source_nom"] == "OpenCOVID19-fr"),
+        ]
+
+    region = fra["maille_nom"].unique()[0]
+    fra = fra[rows]
+    non_time_rows = [key for key in rows if key != "t"]
+    # Fill nas
+    for i, (ind, row) in enumerate(fra.iterrows()):
+        for f in non_time_rows:
+            if pd.isna(row[f]):
+                if i > 0:
+                    fra.loc[ind, f] = fra.iloc[i - 1, fra.columns.get_loc(f)]
+                else:
+                    fra.loc[ind, f] = 0.0
+    fra = fra.groupby(["t"]).aggregate(
+        {"t": "first", **{key: "max" for key in non_time_rows}}
+    )
+    fra = fra.set_index("t")
+    for i in range(fra.shape[0] - 1, 0, -1):
+        row_num = i
+        for col in no_negatives:
+            col_num = fra.columns.get_loc(col)
+            val = fra.iloc[row_num, col_num]
+            val_prev = fra.iloc[row_num - 1, col_num]
+            if val < val_prev:
+                fra.iloc[row_num - 1, col_num] = val
+    # ajout des totaux par jours
+    def par_jour(df):
+        return df - [0, *(df[:-1])]
+
+    fra["reanimation_cumul"] = fra["reanimation"].cumsum()
+    non_time_rows.append("reanimation_cumul")
+    fra["hospitalises_cumul"] = fra["hospitalises"].cumsum()
+    non_time_rows.append("hospitalises_cumul")
+    for f in non_time_rows:
+        fra[f + "_jour"] = par_jour(fra[f])
+        f += "_jour"
+        fra[f + "_jour"] = par_jour(fra[f])
+    # Ajout de entree + sortie vivante de reanimation
+    fra["reanimation_solde_vivant_jour"] = fra["reanimation_jour"] + fra["deces_jour"]
+    fra["reanimation_solde_vivant_jour_jour"] = par_jour(
+        fra["reanimation_solde_vivant_jour"]
+    )
+    # Rolling averages
+    for f in [*non_time_rows, "reanimation_solde_vivant"]:
+        f = f + "_jour"
+        fra[f + "_mma"] = fra[f].rolling(7).mean()
+        f = f + "_jour"
+        fra[f + "_mma"] = fra[f].rolling(7).mean()
+
+    for f in ["deces_jour_mma", "deces_ehpad_jour_mma"]:
+        fra[f + "_jour"] = fra[f] - [0, *(fra[f][:-1])]
+
+    for f in non_time_rows:
+        fra[f + "_jour_prop"] = fra[f + "_jour_mma"] / fra[f]
+    f = "reanimation_solde_vivant"
+    fra[f + "_jour_prop"] = fra[f + "_jour_mma"] / fra["reanimation"]
+    f = "deces_jour_mma"
+    fra[f + "_jour_prop"] = fra[f + "_jour"] / fra["deces_jour_mma"]
+
+    fig, axs = plt.subplots(1, 3)
+    fig.set_size_inches((15, 5))
+    for i, ext in enumerate(["_jour", "_jour_mma", "_jour_prop"]):
+
+        fra.plot(
+            y=[
+                "deces" + ext,
+                "deces_ehpad" + ext,
+                "reanimation" + ext,
+                "reanimation_solde_vivant" + ext,
+            ],
+            ax=axs[i],
+        )
+        axs[i].grid(which="major")
+        axs[i].set_title(region)
+        axis_date_limits(axs[i], min_date="2020-03-01")
+    return fra
+
+
+def rol_val(df, list_rolls, **kwargs):
+    if list_rolls:
+        return (
+            rol_val(df, list_rolls[:-1], **kwargs)
+            .rolling(list_rolls[-1], **kwargs)
+            .mean()
+        )
+    else:
+        return df
+
+
+def last_monday():
+    return pd.to_datetime("2020-09-01")
+
+
+def plot_field_loops(
+    fra: pd.DataFrame,
+    field: str,
+    smoothing: List[int] = [7, 2, 3],
+    maille_active="",
+    start_date="2020-03-09",
+    end_date=last_monday(),
+    **kwargs,
+):
+    """Plots the day on day delta of a field of 'fra' against 
+
+    Args:
+        fra ([type]): [description]
+        field ([type]): [description]
+        smoothing (list, optional): [description]. Defaults to [7, 2, 3].
+        maille_active (str, optional): [description]. Defaults to "".
+        start_date (str, optional): [description]. Defaults to "2020-03-09".
+        end_date ([type], optional): [description]. Defaults to last_monday().
+    """
+    smooth_rol_val = lambda df: rol_val(df, smoothing, **kwargs)
+
+    fra[field + "_smooth_acceleration"] = smooth_rol_val(fra[field + "_jour_jour"])
+    fra[field + "_jour_smooth"] = smooth_rol_val(fra[field + "_jour"])
+
+    fra[field + "_smooth_acceleration_prop"] = (
+        fra[field + "_smooth_acceleration"] / fra[field + "_jour_mma"]
+    )
+
+    fig, axs = plt.subplots(1, 3)
+    fig.suptitle(f"Acceleration du nombre de {field} en {maille_active}")
+    fig.set_size_inches(16, 5)
+    colors = []
+    for c in plt.rcParams["axes.prop_cycle"].by_key()["color"]:
+        colors.append(c)
+        colors.append(c)
+    for ax in axs[:2]:
+        ax.set_prop_cycle(cycler(color=colors))
+
+    date_debut = pd.date_range(start=start_date, periods=1, freq="d")
+    date_fin = end_date
+    rolling_val = [1]
+
+    rolled_fra = rol_val(fra, rolling_val)
+    incr_val = date_debut[0].freq * 7
+    while date_debut < date_fin:
+        week_label = f'semaine du {date_debut[0].strftime("%d/%m")}'
+        ind_log = (date_debut[0] <= rolled_fra.index) & (
+            rolled_fra.index <= date_debut[0] + incr_val
+        )
+        # Timeline
+        rolled_fra[ind_log].plot(
+            y=field + "_jour",
+            marker="o",
+            linestyle="",
+            ax=axs[0],
+            label="",
+            markersize=3,
+        )
+        rolled_fra[ind_log].plot(y=field + "_jour_smooth", ax=axs[0], label=week_label)
+        # Timeline
+        rolled_fra[ind_log].plot(
+            x=field + "_jour_smooth",
+            y=field + "_jour_jour",
+            marker="o",
+            ax=axs[1],
+            label="",
+            markersize=3,
+            linestyle="",
+        )
+        rolled_fra[ind_log].plot(
+            x=field + "_jour_smooth",
+            y=field + "_smooth_acceleration",
+            marker="+",
+            ax=axs[1],
+            label=week_label,
+        )
+        # Timeline
+        rolled_fra[ind_log].plot(
+            x=field + "_jour_smooth",
+            y=field + "_smooth_acceleration_prop",
+            marker="+",
+            ax=axs[2],
+            label=week_label,
+        )
+        date_debut += incr_val
+    for ax in axs:
+        lines = []
+        for line in ax.get_legend().get_lines():
+            if line.get_label():
+                lines.append(line)
+        ax.legend(handles=lines)
+    first_smooth = smoothing[:1]
+    axs[0].set_ylabel(f"{field} par jour (moyenne sur {first_smooth} jours)")
+    axs[0].grid("on")
+    lines = []
+
+    axs[1].set_xlabel("{} par jour (moyenne sur {} jours)".format(field, first_smooth))
+    axs[1].set_ylabel("Delta journalier de l'abscisse ($x_t - x_{t-1}$)")
+    axs[1].grid("on")
+
+    axs[2].yaxis.set_major_formatter(FuncFormatter(lambda y, _: f"{y:.0%}"))
+    axs[2].grid("on")
+    axs[2].set_ylabel("Delta proportionel journalier de l'abscisse")
+    lims = axs[2].get_ylim()
+    if lims[0] < -0.2 or lims[1] > 0.5:
+        axs[2].set_ylim(-0.2, 0.5)
+    axs[1].get_legend().remove()
+    axs[2].get_legend().remove()
