@@ -136,7 +136,7 @@ def rol_val(df, list_rolls, **kwargs):
 
 
 def last_monday():
-    return pd.to_datetime("2020-09-01")
+    return pd.to_datetime("2020-09-08")
 
 
 def plot_field_loops(
@@ -229,7 +229,8 @@ def plot_field_loops(
         for line in ax.get_legend().get_lines():
             if line.get_label():
                 lines.append(line)
-        ax.legend(handles=lines)
+        leg = ax.legend(handles=lines, ncol=4)
+        leg.set_bbox_to_anchor((2.0, -0.2))
     first_smooth = smoothing[:1]
     axs[0].set_ylabel(f"{field} par jour (moyenne sur {first_smooth} jours)")
     axs[0].grid("on")
