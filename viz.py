@@ -22,13 +22,16 @@ def enable_time_series_plot(
     return in_df
 
 
-def axis_date_limits(ax, min_date=None, max_date=None):
+def axis_date_limits(axs, min_date=None, max_date=None, format_date=None):
+    if type(axs) != type(list()):
+        axs = [axs]
     # Tailor axis limits
-    x_min, x_max = pd.to_datetime(ax.get_xlim())
-    if not (max_date is None):
-        ax.set_xlim(right=min(x_max, pd.to_datetime(max_date)))
-    if not (min_date is None):
-        ax.set_xlim(left=max(x_min, pd.to_datetime(min_date)))
+    for ax in axs:
+
+        if not (max_date is None):
+            ax.set_xlim(right=pd.to_datetime(max_date, format=format_date))
+        if not (min_date is None):
+            ax.set_xlim(left=pd.to_datetime(min_date, format=format_date))
 
 
 def oc19_data_preproc(
@@ -137,7 +140,9 @@ def rol_val(df, list_rolls, **kwargs):
 
 
 def last_monday():
-    return datetime.datetime.now() - datetime.timedelta(days=datetime.date.today().weekday())
+    return datetime.datetime.now() - datetime.timedelta(
+        days=datetime.date.today().weekday()
+    )
 
 
 def plot_field_loops(
@@ -168,9 +173,15 @@ def plot_field_loops(
         fra[field + "_smooth_acceleration"] / fra[field + "_jour_mma"]
     )
 
-    fig, axs = plt.subplots(1, 3)
+    # fig, axs = plt.subplots(1, 3)
+    fig = plt.figure(constrained_layout=True)
+    gs = fig.add_gridspec(nrows=3, ncols=2, wspace=0.3, hspace=0.35)
+    axs = []
+    axs.append(fig.add_subplot(gs[0, :]))
+    axs.append(fig.add_subplot(gs[1:, 0]))
+    axs.append(fig.add_subplot(gs[1:, 1]))
     fig.suptitle(f"Acceleration du nombre de {field} en {maille_active}")
-    fig.set_size_inches(16, 5)
+    fig.set_size_inches(10, 8)
     colors = []
     for c in plt.rcParams["axes.prop_cycle"].by_key()["color"]:
         colors.append(c)
@@ -231,21 +242,29 @@ def plot_field_loops(
             if line.get_label():
                 lines.append(line)
         leg = ax.legend(handles=lines, ncol=4)
-        leg.set_bbox_to_anchor((2.0, -0.2))
+        leg.set_bbox_to_anchor((0.9, -0.2))
     first_smooth = smoothing[:1]
-    axs[0].set_ylabel(f"{field} par jour (moyenne sur {first_smooth} jours)")
+    axs[0].set_ylabel(f"{field} par jour\n(moyenne sur {first_smooth} jours)")
     axs[0].grid("on")
     lines = []
 
-    axs[1].set_xlabel("{} par jour (moyenne sur {} jours)".format(field, first_smooth))
+    axs[1].set_xlabel(
+        "{} par jour \n(moyenne sur {} jours)".format(field, first_smooth)
+    )
     axs[1].set_ylabel("Delta journalier de l'abscisse ($x_t - x_{t-1}$)")
     axs[1].grid("on")
 
     axs[2].yaxis.set_major_formatter(FuncFormatter(lambda y, _: f"{y:.0%}"))
     axs[2].grid("on")
-    axs[2].set_ylabel("Delta proportionel journalier de l'abscisse")
+    axs[2].set_ylabel("Delta proportionel journalier\nde l'abscisse")
     lims = axs[2].get_ylim()
     if lims[0] < -0.2 or lims[1] > 0.5:
         axs[2].set_ylim(-0.2, 0.5)
+    axs[0].get_legend().remove()
     axs[1].get_legend().remove()
-    axs[2].get_legend().remove()
+    axis_date_limits(
+        axs[0],
+        min_date=start_date,
+        max_date=datetime.datetime.now().strftime("%Y-%m-%d"),
+    )
+
