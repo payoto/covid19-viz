@@ -1,5 +1,6 @@
 from typing import List
-from datetime import datetime
+import datetime
+
 
 from matplotlib import pyplot as plt
 from matplotlib.ticker import FuncFormatter
@@ -136,7 +137,7 @@ def rol_val(df, list_rolls, **kwargs):
 
 
 def last_monday():
-    return pd.to_datetime("2020-09-08")
+    return datetime.datetime.now() - datetime.timedelta(days=datetime.date.today().weekday())
 
 
 def plot_field_loops(
