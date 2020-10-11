@@ -45,6 +45,7 @@ def oc19_data_preproc(
             (data["maille_code"] == maille_code)
             & (data["source_nom"] != "OpenCOVID19-fr"),
         ]
+        rows = [*rows, "cas_confirmes"]
 
     else:
         fra = data.loc[
@@ -272,4 +273,4 @@ def plot_field_loops(
         min_date=start_date,
         max_date=datetime.datetime.now().strftime("%Y-%m-%d"),
     )
-
+    return axs
