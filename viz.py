@@ -108,9 +108,7 @@ def oc19_data_preproc(
     fra[f + "_jour_prop"] = fra[f + "_jour_mma"] / fra["reanimation"]
     f = "deces_jour_mma"
     fra[f + "_jour_prop"] = fra[f + "_jour"] / fra["deces_jour_mma"]
-
-    fig, axs = plt.subplots(1, 3)
-    fig.set_size_inches((15, 5))
+    fig, axs = get_new_fig()
     for i, ext in enumerate(["_jour", "_jour_mma", "_jour_prop"]):
 
         fra.plot(
@@ -128,6 +126,13 @@ def oc19_data_preproc(
     return fra
 
 
+def get_new_fig():
+    fig, axs = plt.subplots(1, 3)
+    fig.set_size_inches((15, 5))
+
+    return fig, axs
+
+
 def rol_val(df, list_rolls, **kwargs):
     if list_rolls:
         return (
@@ -139,9 +144,9 @@ def rol_val(df, list_rolls, **kwargs):
         return df
 
 
-def last_monday():
+def last_tuesday():
     return datetime.datetime.now() - datetime.timedelta(
-        days=datetime.date.today().weekday()
+        days=datetime.date.today().weekday() - 1
     )
 
 
@@ -151,7 +156,7 @@ def plot_field_loops(
     smoothing: List[int] = [7, 2, 3],
     maille_active="",
     start_date="2020-03-09",
-    end_date=last_monday(),
+    end_date=last_tuesday(),
     **kwargs,
 ):
     """Plots the day on day delta of a field of 'fra' against 
@@ -162,7 +167,7 @@ def plot_field_loops(
         smoothing (list, optional): [description]. Defaults to [7, 2, 3].
         maille_active (str, optional): [description]. Defaults to "".
         start_date (str, optional): [description]. Defaults to "2020-03-09".
-        end_date ([type], optional): [description]. Defaults to last_monday().
+        end_date ([type], optional): [description]. Defaults to last_tuesday().
     """
     smooth_rol_val = lambda df: rol_val(df, smoothing, **kwargs)
 
