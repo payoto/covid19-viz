@@ -34,7 +34,7 @@ def axis_date_limits(axs, min_date=None, max_date=None, format_date=None):
             ax.set_xlim(left=pd.to_datetime(min_date, format=format_date))
 
 
-def oc19_data_preproc(
+def oc19_data_preparation(
     data,
     maille_code,
     rows=["t", "deces", "deces_ehpad", "reanimation", "hospitalises"],
@@ -109,6 +109,16 @@ def oc19_data_preproc(
     fra[f + "_jour_prop"] = fra[f + "_jour_mma"] / fra["reanimation"]
     f = "deces_jour_mma"
     fra[f + "_jour_prop"] = fra[f + "_jour"] / fra["deces_jour_mma"]
+    return fra
+
+
+def oc19_data_preproc(
+    data,
+    maille_code,
+    rows=["t", "deces", "deces_ehpad", "reanimation", "hospitalises"],
+    no_negatives=["deces", "deces_ehpad"],
+):
+    fra = oc19_data_preparation(data, maille_code, rows, no_negatives)
     fig, axs = get_new_fig()
     for i, ext in enumerate(["_jour", "_jour_mma", "_jour_prop"]):
 
@@ -274,3 +284,27 @@ def plot_field_loops(
         max_date=datetime.datetime.now().strftime("%Y-%m-%d"),
     )
     return axs
+
+
+def state_tracking(
+    timeseries: pd.DataFrame, time_state_start: int, time_state_end: int
+):
+    """Approximate the number of people in a given state.
+
+    This is a very coarse approximation defined to track the number of people carrying
+    the coronavirus disease.
+
+    Args:
+        timeseries : A pandas timeseries, or array like object.
+        time_state_start : The number of days before a recorded event at which
+            the state being approximated has started.
+        time_state_end : the number of days after the recorded event at which the
+            state being approximated ends.
+    """
+    delta_start = pd.to_timedelta(time_state_start, unit="days",)
+    delta_end = pd.to_timedelta(time_state_end, unit="days",)
+
+    state = timeseries.rolling(delta_end - delta_start, center=False).sum()
+    state.index = state.index + delta_start
+
+    return state
