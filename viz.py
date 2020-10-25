@@ -109,7 +109,7 @@ def oc19_data_preparation(
     fra[f + "_jour_prop"] = fra[f + "_jour_mma"] / fra["reanimation"]
     f = "deces_jour_mma"
     fra[f + "_jour_prop"] = fra[f + "_jour"] / fra["deces_jour_mma"]
-    return fra
+    return fra, region
 
 
 def oc19_data_preproc(
@@ -118,7 +118,7 @@ def oc19_data_preproc(
     rows=["t", "deces", "deces_ehpad", "reanimation", "hospitalises"],
     no_negatives=["deces", "deces_ehpad"],
 ):
-    fra = oc19_data_preparation(data, maille_code, rows, no_negatives)
+    fra, region = oc19_data_preparation(data, maille_code, rows, no_negatives)
     fig, axs = get_new_fig()
     for i, ext in enumerate(["_jour", "_jour_mma", "_jour_prop"]):
 
