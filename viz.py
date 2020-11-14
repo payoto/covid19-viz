@@ -16,6 +16,8 @@ def enable_time_series_plot(
     plotting
     """
     if timeseries_field_out not in in_df.columns:
+        # Drop the bad data row.
+        in_df = in_df.loc[in_df[timein_field] != "2020-11_11", :]
         in_df[timeseries_field_out] = pd.to_datetime(
             in_df[timein_field], format=date_format
         )
@@ -47,11 +49,13 @@ def oc19_data_preparation(
         ]
         rows = [*rows, "cas_confirmes"]
 
-    else:
+    elif (data["source_nom"] == "OpenCOVID19-fr").any():
         fra = data.loc[
             (data["maille_code"] == maille_code)
             & (data["source_nom"] == "OpenCOVID19-fr"),
         ]
+    else:
+        fra = data.loc[(data["maille_code"] == maille_code), :]
 
     region = fra["maille_nom"].unique()[0]
     fra = fra[rows]
@@ -100,7 +104,7 @@ def oc19_data_preparation(
         f = f + "_jour"
         fra[f + "_mma"] = fra[f].rolling(7).mean()
 
-    for f in ["deces_jour_mma", "deces_ehpad_jour_mma"]:
+    for f in [f"{v}_jour_mma" for v in no_negatives]:
         fra[f + "_jour"] = fra[f] - [0, *(fra[f][:-1])]
 
     for f in non_time_rows:
@@ -120,16 +124,15 @@ def oc19_data_preproc(
 ):
     fra, region = oc19_data_preparation(data, maille_code, rows, no_negatives)
     fig, axs = get_new_fig()
+    plot_quants = [
+        v
+        for v in ["deces", "deces_ehpad", "reanimation", "reanimation_solde_vivant",]
+        if v in rows
+    ]
     for i, ext in enumerate(["_jour", "_jour_mma", "_jour_prop"]):
 
         fra.plot(
-            y=[
-                "deces" + ext,
-                "deces_ehpad" + ext,
-                "reanimation" + ext,
-                "reanimation_solde_vivant" + ext,
-            ],
-            ax=axs[i],
+            y=[v + ext for v in plot_quants], ax=axs[i],
         )
         axs[i].grid(which="major")
         axs[i].set_title(region)
