@@ -39,7 +39,15 @@ def axis_date_limits(axs, min_date=None, max_date=None, format_date=None):
 def oc19_data_preparation(
     data,
     maille_code,
-    rows=["t", "deces", "deces_ehpad", "reanimation", "hospitalises"],
+    rows=[
+        "t",
+        "deces",
+        "deces_ehpad",
+        "reanimation",
+        "hospitalises",
+        "nouvelles_reanimations",
+        "nouvelles_hospitalisations",
+    ],
     no_negatives=["deces", "deces_ehpad"],
 ):
     if maille_code == "FRA":
