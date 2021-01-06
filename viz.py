@@ -319,3 +319,40 @@ def state_tracking(
     state.index = state.index + delta_start
 
     return state
+
+
+def plot_R(
+    fra,
+    infectious_period_around_test=[-1, 2],
+    infect_to_test_base=-5,
+    windowing=dict(window=7, center=True),
+):
+    fig, axs = plt.subplots(1, 2)
+    fig.set_size_inches(10, 5)
+    for offset in [0, -1, 1]:
+        infect_to_test = infect_to_test_base + offset
+        infectieux = (
+            state_tracking(
+                fra["cas_confirmes_jour"].rolling(**windowing).mean(),
+                *infectious_period_around_test,
+            )
+            .rolling(**windowing)
+            .mean()
+        )
+        infectes = state_tracking(
+            fra["cas_confirmes_jour"].rolling(**windowing).mean(),
+            infect_to_test,
+            infect_to_test + 1,
+        ).rolling(**windowing).mean() * (
+            infectious_period_around_test[1] - infectious_period_around_test[0]
+        )
+        if offset == 0:
+            infectieux.plot(ax=axs[0], label="Personnes infectieuses")
+            infectes.plot(ax=axs[0], label="Personnes infectées")
+        R = infectes / infectieux
+        R.plot(ax=axs[1], label=f"{-infect_to_test}")
+    axs[0].legend()
+    axs[1].legend().set_title("Days between infection\n and test")
+    axs[1].set_ylim((0, 2))
+    for ax in axs:
+        ax.grid("on")
