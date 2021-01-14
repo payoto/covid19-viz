@@ -339,16 +339,20 @@ def plot_R(
             .rolling(**windowing)
             .mean()
         )
+        infectious_time = (
+            infectious_period_around_test[1] - infectious_period_around_test[0]
+        )
         infectes = state_tracking(
             fra["cas_confirmes_jour"].rolling(**windowing).mean(),
             infect_to_test,
             infect_to_test + 1,
-        ).rolling(**windowing).mean() * (
-            infectious_period_around_test[1] - infectious_period_around_test[0]
-        )
+        ).rolling(**windowing).mean() * (infectious_time)
         if offset == 0:
             infectieux.plot(ax=axs[0], label="Personnes infectieuses")
             infectes.plot(ax=axs[0], label="Personnes infectées")
+            (
+                fra["cas_confirmes_jour"].rolling(**windowing).mean() * infectious_time
+            ).plot(ax=axs[0], label=f"Cas confirmés (x{infectious_time})")
         R = infectes / infectieux
         R.plot(ax=axs[1], label=f"{-infect_to_test}")
     axs[0].legend()
