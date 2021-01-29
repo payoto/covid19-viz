@@ -321,42 +321,121 @@ def state_tracking(
     return state
 
 
+def plot_R_deaths(
+    fra, data_series="deces_jour", offset=-10, windowing=None,
+):
+    return plot_R(
+        fra,
+        infectious_period_around_test=[-1, 2],
+        infect_to_test_base=-5,
+        data_series=data_series,
+        windowing=windowing,
+        offset=offset,
+    )
+
+
+def plot_R_hospitalised(
+    fra, data_series="hospitalises", offset=-7, windowing=None,
+):
+    return plot_R(
+        fra,
+        infectious_period_around_test=[-1, 2],
+        infect_to_test_base=-5,
+        data_series=data_series,
+        windowing=windowing,
+        offset=offset,
+    )
+
+
+def plot_R_reanimation(
+    fra, data_series="reanimation", offset=-7, windowing=None,
+):
+    return plot_R(
+        fra,
+        infectious_period_around_test=[-1, 2],
+        infect_to_test_base=-5,
+        data_series=data_series,
+        windowing=windowing,
+        offset=offset,
+    )
+
+
 def plot_R(
     fra,
     infectious_period_around_test=[-1, 2],
     infect_to_test_base=-5,
-    windowing=dict(window=7, center=True),
+    windowing=None,
+    data_series="cas_confirmes_jour",
+    offset=0,
 ):
+    if windowing is None:
+        windowing = dict(window=7, center=True)
     fig, axs = plt.subplots(1, 2)
     fig.set_size_inches(10, 5)
-    for offset in [0, -1, 1]:
-        infect_to_test = infect_to_test_base + offset
-        infectieux = (
-            state_tracking(
-                fra["cas_confirmes_jour"].rolling(**windowing).mean(),
-                *infectious_period_around_test,
+    for sensitivity in [0, -1, 1]:
+        infect_to_test = infect_to_test_base + sensitivity
+        R, infectes, infectieux = calculate_R(
+            fra[data_series],
+            windowing=windowing,
+            infectious_period_around_test=infectious_period_around_test,
+            infect_to_data=infect_to_test,
+            offset=offset,
+        )
+        if sensitivity == 0:
+
+            infectious_time = (
+                infectious_period_around_test[1] - infectious_period_around_test[0]
             )
-            .rolling(**windowing)
-            .mean()
-        )
-        infectious_time = (
-            infectious_period_around_test[1] - infectious_period_around_test[0]
-        )
-        infectes = state_tracking(
-            fra["cas_confirmes_jour"].rolling(**windowing).mean(),
-            infect_to_test,
-            infect_to_test + 1,
-        ).rolling(**windowing).mean() * (infectious_time)
-        if offset == 0:
             infectieux.plot(ax=axs[0], label="Personnes infectieuses")
             infectes.plot(ax=axs[0], label="Personnes infectées")
-            (
-                fra["cas_confirmes_jour"].rolling(**windowing).mean() * infectious_time
-            ).plot(ax=axs[0], label=f"Cas confirmés (x{infectious_time})")
-        R = infectes / infectieux
+            (fra[data_series].rolling(**windowing).mean() * infectious_time).plot(
+                ax=axs[0], label=f"{data_series} (x{infectious_time})"
+            )
         R.plot(ax=axs[1], label=f"{-infect_to_test}")
     axs[0].legend()
     axs[1].legend().set_title("Days between infection\n and test")
     axs[1].set_ylim((0, 2))
     for ax in axs:
         ax.grid("on")
+    return axs
+
+
+def calculate_R(
+    series: pd.Series,
+    windowing: dict,
+    infectious_period_around_test: List[int],
+    infect_to_data: int,
+    offset: int,
+):
+    """Calculates R for a series given 
+
+    This function assumes that the infectious process is a Markov chain were the*
+    number of infected peole on a day is:
+
+    # infected = (R * # infectious) / (length of infectious period)
+
+    Args:
+        series : The series on which R needs to be measured
+        windowing : smoothing to be applied to the data
+        infectious_period_around_test : Infectious period as a number of days before
+            and number of days after a test.
+        infect_to_data : Time gap between infection and appearing in the data set
+        offset:
+    """
+    infectieux = (
+        state_tracking(
+            series.rolling(**windowing).mean(), *infectious_period_around_test,
+        )
+        .rolling(**windowing)
+        .mean()
+    )
+    infectious_time = (
+        infectious_period_around_test[1] - infectious_period_around_test[0]
+    )
+    infectes = state_tracking(
+        series.rolling(**windowing).mean(), infect_to_data, infect_to_data + 1,
+    ).rolling(**windowing).mean() * (infectious_time)
+    infectes.index = infectes.index + pd.to_timedelta(offset, unit="days")
+    infectieux.index = infectieux.index + pd.to_timedelta(offset, unit="days")
+    R = infectes / infectieux
+    return R, infectes, infectieux
